@@ -1628,7 +1628,7 @@ real_t s258(struct args_t * func_args)
     for (int nl = 0; nl < iterations; nl++) {
         s = 0.;
         for (int i = 0; i < LEN_2D; ++i) {
-            if (a[i] > 0.) {
+            if (a[i] > (real_t)0.) {
                 s = d[i] * d[i];
             }
             b[i] = s * c[i] + d[i];
@@ -2236,7 +2236,7 @@ real_t s2111(struct args_t * func_args)
     for (int nl = 0; nl < 100*(iterations/(LEN_2D)); nl++) {
         for (int j = 1; j < LEN_2D; j++) {
             for (int i = 1; i < LEN_2D; i++) {
-                aa[j][i] = (aa[j][i-1] + aa[j-1][i])/1.9;
+                aa[j][i] = (aa[j][i-1] + aa[j-1][i])/(real_t)1.9;
             }
         }
         dummy(a, b, c, d, e, aa, bb, cc, 0.);

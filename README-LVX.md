@@ -207,6 +207,45 @@ One thing to expect rather than read as a fault: **one "holds a call" decline
 per function.** `dummy()` sits in the outer `nl` loop, not the inner one, so
 the inner loops are clean and the outer ones are correctly refused.
 
+## Single-precision literals: four casts, and what measuring them showed
+
+`lvx-perf/bin/lvx-fp-literals` flags floating-point literals that are `double`
+in single-precision code. Four sites here escaped upstream's own convention and
+now carry `(real_t)` casts: `tsvc.c:1631` (`> (real_t)0.`), `tsvc.c:2239`
+(`/(real_t)1.9`), and `common.c:139`/`:143` (`(real_t)1. / …`).
+
+`(real_t)` rather than an `f` suffix, deliberately: upstream already uses that
+cast on literals in **49** places, and it is correct for *both* widths. A
+blanket `1.9f` would pin the `-DTSVC_DOUBLE` build to float constants.
+
+**Measuring the change refuted both predictions about it, in opposite
+directions.** It was declined once on the grounds that it would invalidate
+every reference, since `common.c:139` is the initialiser feeding all 151 loops;
+and it was expected to save two widen/narrow instructions per iteration in
+`s2102`. Neither happened:
+
+| | before | after |
+|---|---|---|
+| checksums changed, float | — | **0 of 151** |
+| checksums changed, double | — | **0 of 151** |
+| `tsvc.c` instructions | 10257 | **10257** |
+| `tsvc.c` SIMD instructions | 609 | **609** |
+| `fwidenwd`/`fnarrowdw` | 0 | 0 |
+
+Identical in both FP modes and both files. The reason is that GCC's C front end
+already narrows `float op double_constant` to float arithmetic when the
+constant is exactly representable and the result is converted straight back —
+`shorten_binary_op` and `shorten_compare`. The two-instruction cost measured
+earlier came from a *reduced* version of `s2102` written by hand, not from the
+file; reducing it changed the thing being measured.
+
+So the casts are kept for reasons that are not performance: they state the
+intent, they match what upstream does everywhere else, they clear the scanner
+so a future real finding is not lost in known noise, and they do not depend on
+a front-end narrowing that a different compiler need not perform. What they are
+not is an optimisation, and recording that is the point — the next person to
+find a bare literal here should expect nothing from fixing it on this compiler.
+
 ## Licensing
 
 Upstream is the **University of Illinois/NCSA Open Source License**

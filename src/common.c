@@ -136,11 +136,11 @@ void set_1d_array(real_t * arr, int length, real_t value, int stride)
 {
     if (stride == SET1D_RECIP_IDX) {
         for (int i = 0; i < length; i++) {
-            arr[i] = 1. / (real_t) (i+1);
+            arr[i] = (real_t)1. / (real_t) (i+1);
         }
     } else if (stride == SET1D_RECIP_IDX_SQ) {
         for (int i = 0; i < length; i++) {
-            arr[i] = 1. / (real_t) ((i+1) * (i+1));
+            arr[i] = (real_t)1. / (real_t) ((i+1) * (i+1));
         }
     } else {
         for (int i = 0; i < length; i += stride) {
