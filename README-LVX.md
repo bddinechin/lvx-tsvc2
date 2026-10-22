@@ -188,6 +188,21 @@ roughly a third of what CMS probes here, against 17 of 84 on PolyBench. The
 better acceptance rate the handoff expected looks real; it is not yet broken
 down per loop.
 
+One flag in that invocation needs its caveat carried alongside it:
+**`--param=sms-assume-ivdep=1` is measurement-only and unsound for codegen.**
+It lives in generic `ddg.cc`, so it affects every target. It is legitimate
+*here* because this script compiles and discards the object — nothing it
+produces is executed — but it must not be copied into a build whose output
+runs. Real `safelen` is the sound equivalent and reaches `pass_sms` as of
+lvx-gcc `1e89883136c`; TSVC carries no such pragmas, which is why the param is
+still used, so prefer the pragma in any source you control.
+
+And the Σω > 1 machinery **is** exercised now, just not from here: a
+`safelen(4)` loop yields `mem-cross` at ω = 4, `delta` = 4, RecMII 2 against 7
+for the identical body unannotated. `safelen` had been dying at
+`pass_rtl_loop_done`. So `LVX_CMS_MAX_DELTA` is reached — by a pragma, never by
+an array distance, which is exactly why the census above reads as it does.
+
 One thing to expect rather than read as a fault: **one "holds a call" decline
 per function.** `dummy()` sits in the outer `nl` loop, not the inner one, so
 the inner loops are clean and the outer ones are correctly refused.

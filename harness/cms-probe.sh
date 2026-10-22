@@ -38,7 +38,12 @@
 # small-distance array recurrences into register rotations, and for large
 # distances it uses two base pointers so the stride test cannot relate the
 # references. That machinery is reached by `#pragma omp simd safelen(n)`
-# instead. Do not read a missing delta > 1 here as a gap.
+# instead -- and that is now confirmed rather than conjectured: lvx-gcc
+# 1e89883136c carries loop->safelen into late RTL, where it had been dying at
+# pass_rtl_loop_done (whose properties_destroyed names PROP_loops), and a
+# safelen(4) loop yields mem-cross at omega=4, delta=4, RecMII 2 against 7 for
+# the same body unannotated. So the machinery IS exercised, by a pragma and
+# never by an array distance. Do not read a missing delta > 1 here as a gap.
 set -u
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -83,6 +88,17 @@ work=$(mktemp -d); trap 'rm -rf "$work"' 0 1 2 3 15
 
 # The two invocations the handoff specifies. SMS needs hardware loops on -- it
 # requires the doloop -- and both relaxations, so the graphs are comparable.
+# --param=sms-assume-ivdep=1 below IS MEASUREMENT-ONLY AND UNSOUND FOR CODEGEN.
+# It lives in generic ddg.cc, so it affects every target rather than this one.
+# Using it here is legitimate -- this script compiles and throws the object
+# away, nothing it produces is executed, which is the flag's one valid use --
+# but it must NOT be copied into a build whose output runs.
+#
+# It also has a sound replacement now: real safelen reaches pass_sms and
+# machine_reorg as of lvx-gcc 1e89883136c, so `#pragma GCC ivdep' or
+# `#pragma omp simd safelen(n)' states the same assumption soundly. TSVC
+# carries no such pragmas, which is why the param is still used here; prefer
+# the pragma in any source you control.
 CMS_FLAGS="-mcms-probe -mcms-dump-arcs -fdump-rtl-mach"
 SMS_FLAGS="-fmodulo-sched -fmodulo-sched-allow-regmoves --param=sms-assume-ivdep=1"
 SMS_FLAGS="$SMS_FLAGS -mcms-probe -mcms-assume-ivdep -mcms-dump-arcs -fdump-rtl-sms -fdump-rtl-mach"
