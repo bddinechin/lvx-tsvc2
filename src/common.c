@@ -1,6 +1,7 @@
 /* Make glibc happy with posix_memalign() */
 #define _POSIX_C_SOURCE 200112L
 
+#include <malloc.h>   /* LVX: memalign; see init below */
 #include "common.h"
 #include "array_defs.h"
 
@@ -156,8 +157,16 @@ void set_2d_array(real_t arr[LEN_2D][LEN_2D], real_t value, int stride)
 }
 
 void init(int** ip, real_t* s1, real_t* s2){
-    int xx_errno = posix_memalign((void**)&xx, ARRAY_ALIGNMENT, LEN_1D*sizeof(real_t));
-    int ip_errno = posix_memalign((void**)ip, ARRAY_ALIGNMENT, LEN_1D*sizeof(real_t));
+    /* LVX: newlib ships memalign and aligned_alloc but NOT posix_memalign, so
+       the two calls become memalign. lvx-polybench's utilities/polybench.c:557
+       needed the same substitution for the same reason -- it is a property of
+       newlib, not of this suite. The error convention inverts: memalign
+       returns NULL on failure where posix_memalign returned an errno, so the
+       checks below test the pointers. */
+    xx = (real_t *) memalign (ARRAY_ALIGNMENT, LEN_1D * sizeof (real_t));
+    *ip = (int *)   memalign (ARRAY_ALIGNMENT, LEN_1D * sizeof (real_t));
+    int xx_errno = (xx == 0);
+    int ip_errno = (*ip == 0);
 
     if (xx_errno || ip_errno) {
         fprintf(stderr, "init: failed to allocate arrays\n");
@@ -190,8 +199,13 @@ void init(int** ip, real_t* s1, real_t* s2){
     *s2 = 2.0;
 }
 
+/* LVX: see common.h. Set here because every loop calls initialise_arrays with
+ * its own __func__ before doing any work. */
+const char *tsvc_loop_name = "?";
+
 int initialise_arrays(const char* name)
 {
+    tsvc_loop_name = name;
     real_t any=0.;
     real_t zero=0.;
     real_t half=.5;
@@ -202,7 +216,11 @@ int initialise_arrays(const char* name)
     int frac = SET1D_RECIP_IDX;
     int frac2 = SET1D_RECIP_IDX_SQ;
 
-    printf("%5s\t", name);
+    /* LVX: upstream printed the loop name here, which is where its output got
+       its first column. The reporter prints it now (from tsvc_loop_name, set
+       above), and leaving this in would interleave a bare name with the
+       machine-readable rows -- the name would land on the previous row's line.
+       Removed rather than #ifdef'd because the reporter covers both builds. */
 
     if    (!strcmp(name, "s000")) {
       for (int i = 0; i < LEN_1D; i++) {

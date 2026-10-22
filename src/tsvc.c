@@ -29,6 +29,10 @@
 #include <sys/time.h>
 
 #include "common.h"
+/* LVX: implemented in lvx/tsvc-report.c -- one version writing through crt.S's
+   sys_write on the target, one through printf natively. */
+void tsvc_report_header (void);
+void tsvc_report (const char *name, long long elapsed, real_t checksum);
 #include "array_defs.h"
 
 // array definitions
@@ -3943,18 +3947,31 @@ real_t vbor(struct args_t * func_args)
 
 typedef real_t(*test_function_t)(struct args_t *);
 
+/* LVX: reports through tsvc_report (lvx/tsvc-report.c) instead of printf, and
+ * in INTEGER arithmetic.
+ *
+ * Upstream reconstructs the interval in double seconds, which is right for a
+ * wall-clock measurement and wrong for a cycle count: it would quantise the
+ * figure and make two runs incomparable below the rounding. The LVX
+ * gettimeofday writes a $frcc reading into the timeval as
+ * (cycles / 1000000, cycles % 1000000), so the same tv_sec * 1000000 + tv_usec
+ * reconstruction below is EXACT -- cycles on the target, microseconds on the
+ * host, with the harness recording which.
+ *
+ * The checksum goes out as its raw BIT PATTERN rather than through %f. A
+ * decimal rendering of a float is a lossy comparison, and this value is the
+ * suite's correctness oracle: it has to be exact or it is not an oracle. */
 void time_function(test_function_t vector_func, void * arg_info)
 {
     struct args_t func_args = {.arg_info=arg_info};
 
-    double result = vector_func(&func_args);
+    real_t result = vector_func(&func_args);
 
-    double tic=func_args.t1.tv_sec+(func_args.t1.tv_usec/1000000.0);
-    double toc=func_args.t2.tv_sec+(func_args.t2.tv_usec/1000000.0);
+    long long elapsed =
+        (long long)(func_args.t2.tv_sec  - func_args.t1.tv_sec) * 1000000LL
+      + (long long)(func_args.t2.tv_usec - func_args.t1.tv_usec);
 
-    double taken = toc-tic;
-
-    printf("%10.3f\t%f\n", taken, result);
+    tsvc_report(tsvc_loop_name, elapsed, result);
 }
 
 int main(void){
@@ -3963,7 +3980,7 @@ int main(void){
     int* ip;
     real_t s1,s2;
     init(&ip, &s1, &s2);
-    printf("Loop \tTime(sec) \tChecksum\n");
+    tsvc_report_header();
 
     time_function(&s000, NULL);
     time_function(&s111, NULL);
