@@ -83,7 +83,7 @@ G=$CSW/lvx-toolchain/bin/lvx-mbr-gcc
 [ -x "$G" ] || { echo "no cross compiler at $G -- is lvx-csw built?" >&2; exit 2; }
 
 tmacro=""; [ "$TYPE" = double ] && tmacro="-DTSVC_DOUBLE"
-out="$repo/results/cms-$ARCH-$OPT-$TYPE.txt"
+out="$repo/results/cms-$ARCH-$OPT-$TYPE${IVDEP_TAG:-}.txt"
 work=$(mktemp -d); trap 'rm -rf "$work"' 0 1 2 3 15
 
 # The two invocations the handoff specifies.  SMS needs hardware loops on -- it
@@ -121,7 +121,9 @@ work=$(mktemp -d); trap 'rm -rf "$work"' 0 1 2 3 15
 #                                  uncached latency to a cached load
 #   -mcms-exact-degree             power-of-two rounding inflates `squeeze'
 #                                  without touching pressure (§7octodecies.5)
-CMS_FLAGS="-mcms-probe -mcms-assume-ivdep -mcms-force-speculative-loads"
+IVDEP=${IVDEP:-1}   # 0 measures the corpus WITHOUT the unsound assumption
+CMS_FLAGS="-mcms-probe -mcms-force-speculative-loads"
+[ "$IVDEP" = 1 ] && CMS_FLAGS="$CMS_FLAGS -mcms-assume-ivdep"
 CMS_FLAGS="$CMS_FLAGS -mcms-exact-degree -fdump-rtl-mach"
 SMS_FLAGS="-fmodulo-sched -fmodulo-sched-allow-regmoves"
 SMS_FLAGS="$SMS_FLAGS $CMS_FLAGS -fdump-rtl-sms"
