@@ -189,13 +189,41 @@ better acceptance rate the handoff expected looks real; it is not yet broken
 down per loop.
 
 One flag in that invocation needs its caveat carried alongside it:
-**`--param=sms-assume-ivdep=1` is measurement-only and unsound for codegen.**
-It lives in generic `ddg.cc`, so it affects every target. It is legitimate
-*here* because this script compiles and discards the object — nothing it
-produces is executed — but it must not be copied into a build whose output
-runs. Real `safelen` is the sound equivalent and reaches `pass_sms` as of
-lvx-gcc `1e89883136c`; TSVC carries no such pragmas, which is why the param is
-still used, so prefer the pragma in any source you control.
+**`-mcms-assume-ivdep` is measurement-only and unsound for codegen**, because
+it drops real cross-iteration memory dependences. It is legitimate *here*
+because this script compiles and discards the object — nothing it produces is
+executed — and the compiler now enforces that itself: the flag refuses to act
+without `-mcms-probe`, so it cannot be smuggled into an ordinary build. It
+replaced the generic `--param=sms-assume-ivdep`, which was reverted to upstream
+in lvx-gcc `578092468ae` and is now rejected outright; earlier revisions of
+this file named that param and described it as living in generic `ddg.cc`,
+which no longer holds.
+
+`safelen` is the sound equivalent and reaches `pass_sms` as of lvx-gcc
+`1e89883136c`. But — correcting what this file advised before — adding pragmas
+**cannot** make the SMS comparison honest on this corpus. Every symbolic
+distance in TSVC resolves to 1: `s162` and `s175` read a `*(int *)arg_info`
+that `main` has set to 1, `s151s` is called with `m = 1`, and the remainder are
+literal `a[i-1]`. So the sound annotation is `safelen(1)` everywhere, which is
+a no-op. Run `IVDEP=0` instead — it sweeps the sound graph, and the gap is not
+small:
+
+|              | ivdep assumed | sound graph |            |
+|--------------|--------------:|------------:|------------|
+| ΣRecMII      |          1432 |        3296 | +130%      |
+| ΣResMII      |           892 |         892 | unchanged  |
+| ΣII          |          1838 |        3469 | +89%       |
+| ΣMaxLive     |          5673 |        4076 | −28%       |
+| pipelining   |           388 |         331 |            |
+
+`RecMII` changes in 102 of 427 loops. This matters more here than on PolyBench
+because of *what* gets dropped: PolyBench's binding circuits were 82% closed by
+a store-to-load round trip between **different** arrays reached through
+parameters — genuinely false edges the aliasing oracle could not disprove.
+TSVC's arrays are distinct file-scope objects, so those pairs are already
+disambiguated, and what the assumption drops is largely **self**-dependence on
+a single array. Dropping that is a stronger claim, so the assumed-ivdep series
+should be read as an upper bound on what CMS could reach, not as a prediction.
 
 And the Σω > 1 machinery **is** exercised now, just not from here: a
 `safelen(4)` loop yields `mem-cross` at ω = 4, `delta` = 4, RecMII 2 against 7
