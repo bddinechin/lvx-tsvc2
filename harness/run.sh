@@ -73,7 +73,35 @@ case "$ARCH" in lvx-1|lvx-2) ;; *) echo "ARCH must be lvx-1 or lvx-2" >&2; exit 
 outdir="$repo/results"; mkdir -p "$outdir"
 work=$(mktemp -d); trap 'rm -rf "$work"' 0 1 2 3 15
 
+# lvx-perf's bin/lvx-rev-stamp owns the provenance columns, and is called
+# rather than copied -- this suite is NCSA, lvx-perf is Apache-2.0 WITH
+# LLVM-exception, and executing a script is not deriving from it. A standalone
+# checkout with no superproject records `unknown' rather than failing, the way
+# lvx/run-tsvc.sh already degrades when it cannot find lvx-csw.
+#
+# Per row, not per sweep: a toolchain reinstalled in place midway is the
+# hazard, and a once-per-sweep stamp cannot show it. That matters here more
+# than most -- this harness writes 141 loops x 2 vectorizer settings per file,
+# so a sweep spans minutes of wall clock.
+super=$(git -C "$repo" rev-parse --show-superproject-working-tree 2>/dev/null) || super=
+STAMP=
+[ -n "$super" ] && [ -x "$super/bin/lvx-rev-stamp" ] && STAMP="$super/bin/lvx-rev-stamp"
+stamp_cols=(csw_rev gcc_rev gem5_rev cc_mtime)
+stamp_header() {
+    if [ -n "$STAMP" ]; then "$STAMP" --tsv-header
+    else (IFS=$'\t'; printf '%s\n' "${stamp_cols[*]}"); fi
+}
+stamp_row() {
+    if [ -n "$STAMP" ]; then "$STAMP" --tsv-row ${CSW:+--csw "$CSW"}
+    else
+        local u=() c
+        for c in "${stamp_cols[@]}"; do u+=(unknown); done
+        (IFS=$'\t'; printf '%s\n' "${u[*]}")
+    fi
+}
+
 HEADER='loop\tarch\topt\ttype\tvec\tfpmode\titerations\tcorrect\tcycles\tchecksum_bits\ttext_bytes\tinsns_static\tbundles_static\tsimd_insns\tcompile_seconds\tcpu_model'
+HEADER="$HEADER\t$(stamp_header | sed 's/\t/\\t/g')"
 
 rc=0
 for type in $TYPES; do
@@ -125,10 +153,10 @@ for type in $TYPES; do
             elif [ "$want" = "$bits" ]; then correct=ok;       ok=$((ok+1))
             else correct=MISMATCH; bad=$((bad+1)); fi
         else correct=noref; noref=$((noref+1)); fi
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                "$loop" "$ARCH" "$OPT" "$type" "$vec" "$FPMODE" "$ITER" "$correct" \
                "${cyc:-}" "${bits:-}" "${text:-}" "${insns:-}" "${bund:-}" "${simd:-}" \
-               "${csec:-}" "${cpu:-}" >> "$rows"
+               "${csec:-}" "${cpu:-}" "$(stamp_row)" >> "$rows"
     done < <(grep '^RESULT' "$log")
 
     cat "$rows" >> "$tsv"
