@@ -12,6 +12,8 @@
 #   FPMODE=fast ./harness/run.sh           # see the ICE note in lvx/run-tsvc.sh
 #   ITER=4 ./harness/run.sh
 #   STATIC_ONLY=1 ./harness/run.sh         # build + static metrics, no ISS
+#   LVX_EXTRA_CFLAGS='-mcms-probe' ./harness/run.sh   # CROSS-only extra flags
+#                                         (never reaches the x86 oracle)
 #   ./harness/compare.sh results/A.tsv results/B.tsv
 #   ./harness/cms-probe.sh                 # the compile-only dependence probe
 #

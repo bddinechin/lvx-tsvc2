@@ -153,6 +153,7 @@ vecreport=""
 [ "${VECREPORT:-0}" = 1 ] && vecreport="-fopt-info-vec-all=$WD/vec.txt -fno-inline"
 # shellcheck disable=SC2086
 "$BIN/lvx-mbr-gcc" -$OPT -march="$ARCH" $vecflag $fpflag $vecreport $DEFS -I"$HERE/src" -w \
+    ${LVX_EXTRA_CFLAGS:-} \
     -T lvx-sim.ld -L"$LDSCRIPTS" \
     -o "$WD/tsvc.elf" "$HERE/lvx/tsvc-time.c" $SRCS -lm \
     || { echo "BUILD FAIL"; exit 1; }
