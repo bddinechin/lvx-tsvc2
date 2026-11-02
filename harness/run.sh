@@ -175,9 +175,42 @@ for type in $TYPES; do
         cyc=$(printf '%s' "$line"  | sed -n 's/.*\telapsed \(-\?[0-9]*\).*/\1/p')
         if [ "$have_ref" = 1 ]; then
             want=$(awk -F'\t' -v l="$loop" '$1==l{print $2}' "$ref")
+            # A checksum is compared as raw bits, deliberately: a printed
+            # float is a lossy oracle. But raw bits also report a last-place
+            # difference as a total failure, and the other four suites here
+            # already have vocabulary for that -- polybench's fp-N ("N values
+            # differ, each by at most one unit in the last place", see its
+            # dumpcmp.py) and mibench's fp-Nulp. tsvc2 was the only suite
+            # without it, so it reported MISMATCH for drift the rest classify.
+            #
+            # s4115 on double is the case that found this: LVX contracts
+            # sum += a[i]*b[ip[i]] into one ffmaw with a single rounding,
+            # while the native oracle is built for baseline x86-64, which has
+            # no FMA and rounds twice. Proved without the ISS -- rebuilding
+            # the oracle with -mfma -ffp-contract=fast reproduces the LVX
+            # value 4607357212451529636 exactly, against 4607357212451529637
+            # at baseline. One ulp, and the vec and novec arms agree with each
+            # other, so no transformation is implicated.
+            #
+            # The bit patterns are compared as unsigned integers, which is a
+            # true ulp distance only for finite values of the same sign; the
+            # guard below keeps it to small differences, where that holds.
+            # Anything larger stays MISMATCH, because then it is not drift.
+            ulp_apart() {   # $1,$2 = bit patterns; echoes the distance
+                [ "${1#-}" = "$1" ] && [ "${2#-}" = "$2" ] || { echo 99; return; }
+                if [ "$1" -ge "$2" ] 2>/dev/null; then echo $(( $1 - $2 ))
+                else echo $(( $2 - $1 )); fi
+            }
             if   [ -z "$want" ];        then correct=NOTINREF; bad=$((bad+1))
             elif [ "$want" = "$bits" ]; then correct=ok;       ok=$((ok+1))
-            else correct=MISMATCH; bad=$((bad+1)); fi
+            else
+                d=$(ulp_apart "$want" "$bits")
+                if [ "$d" -le 4 ] 2>/dev/null; then
+                    correct="fp-${d}ulp"; ok=$((ok+1))
+                else
+                    correct=MISMATCH; bad=$((bad+1))
+                fi
+            fi
         else correct=noref; noref=$((noref+1)); fi
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                "$loop" "$ARCH" "$OPT" "$type" "$vec" "$FPMODE" "$ITER" "$correct" \
