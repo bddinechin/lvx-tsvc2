@@ -12,6 +12,7 @@
 #   ITER=4 ./lvx/run-tsvc.sh           more passes per loop
 #   VECREPORT=1 ./lvx/run-tsvc.sh      -fopt-info-vec-all to a file
 #   STATIC_ONLY=1 ./lvx/run-tsvc.sh    build + static metrics, no ISS
+#   TMO=0 ./lvx/run-tsvc.sh            no ISS time limit (default 7200 s)
 #   ./lvx/run-tsvc.sh --native         the x86 reference, same source
 #   ./lvx/run-tsvc.sh --csw /path/to/lvx-csw
 #
@@ -184,3 +185,12 @@ LVX_CPU=$LVX_CPU timeout "${TMO:-7200}" \
     "$CSW/lvx-gem5/build/$GEM5BIN" --outdir="$WD/m5out" \
     "$CSW/lvx-gem5/tests/lvx/run_lvx.py" "$WD/tsvc.elf" 2>&1 |
     grep -E '^RESULT|^# RESULT|target exited'
+# The grep above drops gem5's last words and the script used to exit with
+# grep's status. RESULT rows stream out loop by loop, so a run killed partway
+# still matched and passed as a complete one, minus the loops it never reached.
+rc=("${PIPESTATUS[@]}")
+if [ "${rc[0]}" = 124 ]; then
+    echo "TIMEOUT: gem5 killed after ${TMO:-7200} s, rows above are partial -- TMO=0 lifts the limit"
+    exit 124
+fi
+exit "${rc[1]}"

@@ -160,6 +160,10 @@ for type in $TYPES; do
     fi
 
     nres=$(grep -c '^RESULT' "$log" || true)
+    if grep -q '^TIMEOUT:' "$log"; then
+        echo "  RUN TIMEOUT (${nres:-0} partial rows discarded)"
+        grep '^TIMEOUT:' "$log" | sed 's/^/  | /'; rc=1; continue
+    fi
     if [ "$run_ok" != 1 ] || [ "${nres:-0}" -eq 0 ]; then
         echo "  RUN FAIL (no rows)"; sed -n '1,10p' "$log" | sed 's/^/  | /'; rc=1; continue
     fi
